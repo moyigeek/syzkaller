@@ -3,7 +3,7 @@
 
 // TODO: switch syz-verifier to use syz-fuzzer.
 
-//go:build ignore
+//
 
 package main
 
@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"syscall"
 
-	"github.com/google/syzkaller/pkg/ipc"
+	"github.com/google/syzkaller/pkg/flatrpc"
 	"github.com/google/syzkaller/prog"
 )
 
@@ -23,7 +23,7 @@ type ExecResult struct {
 	Hanged bool
 	// Info contains information about the execution of each system call
 	// in the generated programs.
-	Info ipc.ProgInfo
+	Info flatrpc.ProgInfo
 	// Crashed is set to true if a crash occurred while executing the program.
 	// TODO: is not used properly. Crashes are just an errors now.
 	Crashed bool
@@ -46,7 +46,7 @@ func (l *ExecResult) IsEqual(r *ExecResult) bool {
 	}
 
 	for i := 0; i < len(lCalls); i++ {
-		if lCalls[i].Errno != rCalls[i].Errno ||
+		if lCalls[i].Error != rCalls[i].Error ||
 			lCalls[i].Flags != rCalls[i].Flags {
 			return false
 		}
@@ -78,7 +78,7 @@ type ReturnState struct {
 	// Errno is returned by executing the system call.
 	Errno int
 	// Flags stores the call flags (see pkg/ipc/ipc.go).
-	Flags ipc.CallFlags
+	Flags flatrpc.CallFlag
 	// Crashed is set to true if the kernel crashed while executing the program
 	// that contains the system call.
 	Crashed bool
@@ -124,7 +124,7 @@ func CompareResults(res []*ExecResult, prog *prog.Prog) *ResultReport {
 			}
 
 			ci := r.Info.Calls[idx]
-			cr.States[r.Pool] = ReturnState{Errno: ci.Errno, Flags: ci.Flags}
+			cr.States[r.Pool] = ReturnState{Errno: int(ci.Error), Flags: ci.Flags}
 		}
 		rr.Reports = append(rr.Reports, cr)
 	}

@@ -3,14 +3,14 @@
 
 // TODO: switch syz-verifier to use syz-fuzzer.
 
-//go:build ignore
+//
 
 package main
 
 import (
 	"testing"
 
-	"github.com/google/syzkaller/pkg/ipc"
+	"github.com/google/syzkaller/pkg/flatrpc"
 	"github.com/google/syzkaller/pkg/osutil"
 	"github.com/google/syzkaller/prog"
 )
@@ -52,13 +52,13 @@ func makeTestResultDirectory(t *testing.T) string {
 }
 
 func makeExecResult(pool int, errnos []int, flags ...int) *ExecResult {
-	r := &ExecResult{Pool: pool, Info: ipc.ProgInfo{Calls: []ipc.CallInfo{}}}
+	r := &ExecResult{Pool: pool, Info: flatrpc.ProgInfo{Calls: []*flatrpc.CallInfoRawT{}}}
 	for _, e := range errnos {
-		r.Info.Calls = append(r.Info.Calls, ipc.CallInfo{Errno: e})
+		r.Info.Calls = append(r.Info.Calls, &flatrpc.CallInfoRawT{Error: int32(e)})
 	}
 
 	for idx, f := range flags {
-		r.Info.Calls[idx].Flags = ipc.CallFlags(f)
+		r.Info.Calls[idx].Flags = flatrpc.CallFlag(f)
 	}
 	return r
 }
@@ -89,7 +89,7 @@ func makeCallStats(name string, occurrences, mismatches uint64, states map[Retur
 func returnState(errno int, flags ...int) ReturnState {
 	rs := ReturnState{Errno: errno}
 	if flags != nil {
-		rs.Flags = ipc.CallFlags(flags[0])
+		rs.Flags = flatrpc.CallFlag(flags[0])
 	}
 	return rs
 }

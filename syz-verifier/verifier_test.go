@@ -3,7 +3,7 @@
 
 // TODO: switch syz-verifier to use syz-fuzzer.
 
-//go:build ignore
+//
 
 package main
 
@@ -17,7 +17,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/syzkaller/pkg/osutil"
-	"github.com/google/syzkaller/pkg/rpctype"
 	"github.com/google/syzkaller/prog"
 )
 
@@ -120,9 +119,9 @@ func TestUpdateUnsupported(t *testing.T) {
 			}
 			vrf.Init()
 
-			a := &rpctype.UpdateUnsupportedArgs{
+			a := &UpdateUnsupportedArgs{
 				Pool: 0,
-				UnsupportedCalls: []rpctype.SyscallReason{
+				UnsupportedCalls: []UnsupportedCall{
 					{ID: target.SyscallMap["test$res0"].ID, Reason: "foo"},
 					{ID: 2, Reason: "bar"},
 					{ID: target.SyscallMap["test$union0"].ID, Reason: "tar"},
@@ -169,7 +168,7 @@ func TestUpdateUnsupportedNotCalledTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to initialise RPC server: %v", err)
 	}
-	a := &rpctype.UpdateUnsupportedArgs{Pool: 0}
+	a := &UpdateUnsupportedArgs{Pool: 0}
 
 	if err := srv.UpdateUnsupported(a, nil); err != nil {
 		t.Fatalf("srv.UpdateUnsupported failed: %v", err)

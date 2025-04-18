@@ -1,10 +1,6 @@
 // Copyright 2021 syzkaller project authors. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-// TODO: switch syz-verifier to use syz-fuzzer.
-
-//go:build ignore
-
 package main
 
 import (
@@ -13,11 +9,59 @@ import (
 	"os"
 	"sync"
 
+	"github.com/google/syzkaller/pkg/flatrpc"
 	"github.com/google/syzkaller/pkg/log"
 	"github.com/google/syzkaller/pkg/rpctype"
 )
 
-// RPCServer is a wrapper around the rpc.Server. It communicates with  Runners,
+type SyscallReason struct {
+	ID     int
+	Reason string
+}
+
+// RunnerConnectArgs represents the arguments for the Connect RPC call.
+type RunnerConnectArgs struct {
+	Pool int
+	VM   int
+}
+
+// RunnerConnectRes represents the response for the Connect RPC call.
+type RunnerConnectRes struct {
+	CheckUnsupportedCalls bool
+}
+
+// UpdateUnsupportedArgs represents the arguments for the UpdateUnsupported RPC call.
+type UpdateUnsupportedArgs struct {
+	Pool             int
+	UnsupportedCalls []UnsupportedCall
+}
+
+// UnsupportedCall represents a system call that is not supported.
+type UnsupportedCall struct {
+	ID     int
+	Reason string
+}
+
+// NextExchangeArgs represents the arguments for the NextExchange RPC call.
+type NextExchangeArgs struct {
+	Pool       int
+	VM         int
+	ExecTaskID int64
+	Hanged     bool
+	Info       *ExecInfo
+}
+
+// ExecInfo represents execution information sent by the runner.
+type ExecInfo struct {
+	Calls []int
+}
+
+// NextExchangeRes represents the response for the NextExchange RPC call.
+type NextExchangeRes struct {
+	ExecTask ExecTask
+}
+
+// RPCServer is a wrapper around the rpc.Server. It communicates with Runners,
 // generates programs and sends complete Results for verification.
 type RPCServer struct {
 	vrf  *Verifier
@@ -50,7 +94,7 @@ func startRPCServer(vrf *Verifier) (*RPCServer, error) {
 }
 
 // Connect notifies the RPCServer that a new Runner was started.
-func (srv *RPCServer) Connect(a *rpctype.RunnerConnectArgs, r *rpctype.RunnerConnectRes) error {
+func (srv *RPCServer) Connect(a *RunnerConnectArgs, r *RunnerConnectRes) error {
 	r.CheckUnsupportedCalls = !srv.vrf.pools[a.Pool].checked
 	return nil
 }
@@ -61,7 +105,7 @@ func (srv *RPCServer) Connect(a *rpctype.RunnerConnectArgs, r *rpctype.RunnerCon
 // When all kernels have reported the list of unsupported system calls, the
 // choice table will be created using only the system calls supported by all
 // kernels.
-func (srv *RPCServer) UpdateUnsupported(a *rpctype.UpdateUnsupportedArgs, r *int) error {
+func (srv *RPCServer) UpdateUnsupported(a *UpdateUnsupportedArgs, r *int) error {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 
@@ -92,13 +136,30 @@ func (srv *RPCServer) UpdateUnsupported(a *rpctype.UpdateUnsupportedArgs, r *int
 
 // NextExchange is called when a Runner requests a new program to execute and,
 // potentially, wants to send a new Result to the RPCServer.
-func (srv *RPCServer) NextExchange(a *rpctype.NextExchangeArgs, r *rpctype.NextExchangeRes) error {
-	if a.Info.Calls != nil {
+func (srv *RPCServer) NextExchange(a *NextExchangeArgs, r *NextExchangeRes) error {
+	if a.Info != nil && a.Info.Calls != nil {
+		// Convert ExecInfo.Calls (type []int) to []*flatrpc.CallInfoRawT
+		var callInfoList []*flatrpc.CallInfoRawT
+		for range a.Info.Calls {
+			callInfoList = append(callInfoList, &flatrpc.CallInfoRawT{
+				Flags:  0,   // Set appropriate flags if needed
+				Error:  0,   // Set appropriate error if needed
+				Signal: nil, // Set appropriate signal if needed
+				Cover:  nil, // Set appropriate cover if needed
+				Comps:  nil, // Set appropriate comparisons if needed
+			})
+		}
+
+		// Create a flatrpc.ProgInfo instance
+		progInfo := flatrpc.ProgInfo{
+			Calls: callInfoList,
+		}
+
 		srv.stopWaitResult(a.Pool, a.VM, a.ExecTaskID)
 		srv.vrf.PutExecResult(&ExecResult{
 			Pool:       a.Pool,
 			Hanged:     a.Hanged,
-			Info:       a.Info,
+			Info:       progInfo, // Pass the value, not the pointer
 			ExecTaskID: a.ExecTaskID,
 		})
 	}
@@ -110,7 +171,6 @@ func (srv *RPCServer) NextExchange(a *rpctype.NextExchangeArgs, r *rpctype.NextE
 
 	return nil
 }
-
 func vmTasksKey(poolID, vmID int) int {
 	return poolID*1000 + vmID
 }

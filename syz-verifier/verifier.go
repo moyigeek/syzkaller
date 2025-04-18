@@ -3,7 +3,7 @@
 
 // TODO: switch syz-verifier to use syz-fuzzer.
 
-//go:build ignore
+//
 
 package main
 
@@ -22,7 +22,6 @@ import (
 	"github.com/google/syzkaller/pkg/instance"
 	"github.com/google/syzkaller/pkg/log"
 	"github.com/google/syzkaller/pkg/osutil"
-	"github.com/google/syzkaller/pkg/rpctype"
 	"github.com/google/syzkaller/prog"
 	"github.com/google/syzkaller/vm"
 )
@@ -117,21 +116,20 @@ func (vrf *Verifier) StartProgramsAnalysis() {
 	}()
 }
 
-func (vrf *Verifier) GetRunnerTask(kernel int, existing EnvDescr) *rpctype.ExecTask {
+func (vrf *Verifier) GetRunnerTask(kernel int, existing EnvDescr) *ExecTask {
 	vrf.tasksMutex.Lock()
 	defer vrf.tasksMutex.Unlock()
 
 	for {
 		for env := existing; env >= AnyEnvironment; env-- {
 			if task, ok := vrf.kernelEnvTasks[kernel][env].PopTask(); ok {
-				return task.ToRPC()
+				return task // Return the task directly
 			}
 		}
 
 		vrf.onTaskAdded.Wait()
 	}
 }
-
 func (vrf *Verifier) PutExecResult(result *ExecResult) {
 	c := vrf.taskFactory.GetExecResultChan(result.ExecTaskID)
 	c <- result
@@ -269,7 +267,7 @@ func (vrf *Verifier) createAndManageInstance(pi *poolInfo, poolID, vmID int) {
 	}
 
 	cmd := instance.RunnerCmd(runnerBin, fwdAddr, vrf.target.OS, vrf.target.Arch, poolID, 0, false, vrf.newEnv)
-	_, _, err = inst.Run(pi.cfg.Timeouts.VMRunningTime, pi.Reporter, cmd, vm.ExitTimeout, vm.StopChan(vrf.vmStop))
+	_, _, err = inst.Run(pi.cfg.Timeouts.VMRunningTime, pi.Reporter, cmd, vm.ExitTimeout)
 	if err != nil {
 		log.Fatalf("failed to start runner: %v", err)
 	}
